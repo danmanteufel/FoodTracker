@@ -13,7 +13,6 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
     //MARK: Defines
     let kSearchBarHeight: CGFloat = 44.0
     let kSuggestedFoodCell = "Suggested Food Cell"
-    let model = FTModel()
     
     //MARK: Properties
     @IBOutlet weak var tableView: UITableView!
@@ -23,6 +22,7 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
     //MARK: Flow Functions
     override func viewDidLoad() {
         super.viewDidLoad()
+        setupModel()
         searchController = UISearchController(searchResultsController: nil)
         searchController.searchResultsUpdater = self
         searchController.dimsBackgroundDuringPresentation = false
@@ -40,28 +40,27 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
     
     //MARK: Helper Functions
     func filterContentForSearch(searchText: String, scope: Int) {
-//        model.filteredSuggestedSearchFoods = model.suggestedSearchFoods.filter({(food: String) -> Bool
+//        filteredSuggestedSearchFoods = suggestedSearchFoods.filter({(food: String) -> Bool
 //            in
 //            var foodMatch = food.rangeOfString(searchText)
 //            return foodMatch != nil
 //        })
         //Can you do the above with a trailing closure? - YES, IT APPEAR YOU CAN!
 
-//        model.filteredSuggestedSearchFoods = model.suggestedSearchFoods.filter(){food in food.rangeOfString(searchText) != nil}
+//        filteredSuggestedSearchFoods = suggestedSearchFoods.filter(){food in food.rangeOfString(searchText) != nil}
         
         //Maybe even more concise?!? - YES! FTW.
         
-        model.filteredSuggestedSearchFoods = model.suggestedSearchFoods.filter(){$0.rangeOfString(searchText) != nil}
-
+        filteredSuggestedSearchFoods = suggestedSearchFoods.filter(){$0.rangeOfString(searchText) != nil}
     }
 
     //MARK: UITableView Data Source
     func tableView(tableView: UITableView, cellForRowAtIndexPath indexPath: NSIndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCellWithIdentifier(kSuggestedFoodCell) as UITableViewCell
         if searchController.active {
-            cell.textLabel?.text = model.filteredSuggestedSearchFoods[indexPath.row]
+            cell.textLabel?.text = filteredSuggestedSearchFoods[indexPath.row]
         } else {
-            cell.textLabel?.text = model.suggestedSearchFoods[indexPath.row]
+            cell.textLabel?.text = suggestedSearchFoods[indexPath.row]
         }
         cell.accessoryType = .DisclosureIndicator
         return cell
@@ -69,9 +68,9 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
     
     func tableView(tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         if searchController.active {
-            return model.filteredSuggestedSearchFoods.count
+            return filteredSuggestedSearchFoods.count
         } else {
-            return model.suggestedSearchFoods.count
+            return suggestedSearchFoods.count
         }
     }
     
@@ -81,6 +80,11 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
         let selectedScopeButtonIndex = searchController.searchBar.selectedScopeButtonIndex
         filterContentForSearch(searchString, scope: selectedScopeButtonIndex)
         tableView.reloadData()
+    }
+    
+    //MARK: UISearchBar Delegate
+    func searchBarSearchButtonClicked(searchBar: UISearchBar) {
+        makeRequest(searchBar.text)
     }
 }
 
@@ -102,19 +106,30 @@ class DetailVC: UIViewController {
 }
 
 //MARK: - Model
-//MARK: Classes
-class FTModel {
-    //MARK: Defines
-    let kDefaultSuggestedSearchFoods = ["apple", "bagel", "banana", "beer", "bread", "carrots", "cheddar cheese", "chicen breast", "chili with beans", "chocolate chip cookie", "coffee", "cola", "corn", "egg", "graham cracker", "granola bar", "green beans", "ground beef patty", "hot dog", "ice cream", "jelly doughnut", "ketchup", "milk", "mixed nuts", "mustard", "oatmeal", "orange juice", "peanut butter", "pizza", "pork chop", "potato", "potato chips", "pretzels", "raisins", "ranch salad dressing", "red wine", "rice", "salsa", "shrimp", "spaghetti", "spaghetti sauce", "tuna", "white wine", "yellow cake"]
+//MARK: Defines
+let kDefaultSuggestedSearchFoods = ["apple", "bagel", "banana", "beer", "bread", "carrots", "cheddar cheese", "chicen breast", "chili with beans", "chocolate chip cookie", "coffee", "cola", "corn", "egg", "graham cracker", "granola bar", "green beans", "ground beef patty", "hot dog", "ice cream", "jelly doughnut", "ketchup", "milk", "mixed nuts", "mustard", "oatmeal", "orange juice", "peanut butter", "pizza", "pork chop", "potato", "potato chips", "pretzels", "raisins", "ranch salad dressing", "red wine", "rice", "salsa", "shrimp", "spaghetti", "spaghetti sauce", "tuna", "white wine", "yellow cake"]
+let kAppID = "e26c0bef"
+let kAppKey = "77b95827071b8f2193c8475820238287"
 
-    //MARK: Globals
-    var suggestedSearchFoods: [String] = []
-    var filteredSuggestedSearchFoods: [String] = []
+//MARK: Globals
+var suggestedSearchFoods: [String] = []
+var filteredSuggestedSearchFoods: [String] = []
+
+func setupModel() {
+    suggestedSearchFoods = kDefaultSuggestedSearchFoods
+}
+
+func makeRequest(searchString: String) {
+//EXAMPLE OF AN HTTP GET REQUEST
+//    let url = NSURL(string: "https://api.nutritionix.com/v1_1/search/"+searchString+"?results=0%3A20&cal_min=0&cal_max=50000&fields=item_name%2Cbrand_name%2Citem_id%2Cbrand_id&appId="+kAppID+"&appKey="+kAppKey)
+//    let task = NSURLSession.sharedSession().dataTaskWithURL(url!, completionHandler: { (data, response, error) -> Void in
+//        var stringForData = NSString(data: data, encoding: NSUTF8StringEncoding)
+//        println(stringForData)
+//        println(response)
+//    })
+//    task.resume()
     
-    //MARK: Init
-    init() {
-        suggestedSearchFoods = kDefaultSuggestedSearchFoods
-    }
+//IMPLEMENTING USING AN HTTP POST REQUEST
     
 }
 
