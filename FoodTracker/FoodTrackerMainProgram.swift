@@ -122,7 +122,8 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
             searchController.active = true
             model.makeRequest(searchFoodName)
         case 1:
-            break
+            let idValue = model.apiSearchForFoods[indexPath.row].idValue
+            model.saveUSDAItemForId(idValue)
         default:
             break
         }
@@ -175,6 +176,23 @@ class FTModel: NSObject {
     let kDefaultSuggestedSearchFoods = ["apple", "bagel", "banana", "beer", "bread", "carrots", "cheddar cheese", "chicken breast", "chili with beans", "chocolate chip cookie", "coffee", "cola", "corn", "egg", "graham cracker", "granola bar", "green beans", "ground beef patty", "hot dog", "ice cream", "jelly doughnut", "ketchup", "milk", "mixed nuts", "mustard", "oatmeal", "orange juice", "peanut butter", "pizza", "pork chop", "potato", "potato chips", "pretzels", "raisins", "ranch salad dressing", "red wine", "rice", "salsa", "shrimp", "spaghetti", "spaghetti sauce", "tuna", "white wine", "yellow cake"]
     let kAppID = "e26c0bef"
     let kAppKey = "77b95827071b8f2193c8475820238287"
+    let kAPIHits = "hits"
+    let kAPIID = "_id"
+    let kAPIFields = "fields"
+    let kAPIItemNameField = "item_name"
+    let kAPIBrandName = "brand_name"
+    let kAPIKeywords = "keywords"
+    let kAPIUSDAFields = "usda_fields"
+    let kAPIComponentValue = "value"
+    let kAPICalciumField = "CA"
+    let kAPICarbohydratesField = "CHOCDF"
+    let kAPIFatTotalField = "FAT"
+    let kAPICholesterolField = "CHOLE"
+    let kAPIProteinField = "PROCNT"
+    let kAPISugarField = "SUGAR"
+    let kAPIVitaminCField = "VITC"
+    let kAPIEnergyField = "ENERC_KCAL"
+    let kCDUSDAItem = "USDAItem"
 
     //MARK: Properties
     var suggestedSearchFoods: [String] = []
@@ -186,7 +204,7 @@ class FTModel: NSObject {
     }
     dynamic var apiResultsChanged = false
     var lastJSONResponse: NSDictionary!
-
+    
     //MARK: Model Functions
     override init() {
         super.init()
@@ -210,12 +228,12 @@ class FTModel: NSObject {
         var params = [
             "appId" : kAppID,
             "appKey" : kAppKey,
-            "fields" : ["item_name", "brand_name", "keywords", "usda_fields"],
+            "fields" : [kAPIItemNameField, kAPIBrandName, kAPIKeywords, kAPIUSDAFields],
             "limit" : "50",
             "query" : searchString,
             "filters" : [
                 "exists" : [
-                    "usda_fields" : true]]]
+                    kAPIUSDAFields : true]]]
         var error: NSError?
         request.HTTPBody = NSJSONSerialization.dataWithJSONObject(params, options: nil, error: &error)
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -246,12 +264,12 @@ class FTModel: NSObject {
     func jsonAsUSDAIdAndNameSearchResults (json: NSDictionary) -> [(name: String, idValue: String)] {
         var usdaItemsSearchResults: [(name: String, idValue: String)] = []
         var searchResult: (name: String, idValue: String)
-        if let results: [AnyObject] = json["hits"] as? [AnyObject] {
+        if let results: [AnyObject] = json[kAPIHits] as? [AnyObject] {
             for itemDictionary in results {
-                if itemDictionary["_id"] != nil {
-                    if let fieldsDictionary = itemDictionary["fields"] as? NSDictionary {
-                        if let name = fieldsDictionary["item_name"] as? String {
-                            let idValue = itemDictionary["_id"] as String
+                if itemDictionary[kAPIID] != nil {
+                    if let fieldsDictionary = itemDictionary[kAPIFields] as? NSDictionary {
+                        if let name = fieldsDictionary[kAPIItemNameField] as? String {
+                            let idValue = itemDictionary[kAPIID] as String
                             searchResult = (name: name, idValue: idValue)
                             usdaItemsSearchResults += [searchResult]
                         }
@@ -263,30 +281,83 @@ class FTModel: NSObject {
         return usdaItemsSearchResults
     }
     
-    func saveUSDAItemForId(idValue: String, json: NSDictionary) {
-        if let results: [AnyObject] = json["hits"] as? [AnyObject] {
+    func saveUSDAItemForId(idValue: String) {
+        if let results: [AnyObject] = lastJSONResponse[kAPIHits] as? [AnyObject] {
             for itemDictionary in results {
-                if itemDictionary["_id"] != nil &&
-                   itemDictionary["_id"] as String == idValue {
+                if itemDictionary[kAPIID] != nil &&
+                   itemDictionary[kAPIID] as String == idValue {
                     let moc = (UIApplication.sharedApplication().delegate as AppDelegate).managedObjectContext
                     
                     //Checking for item already in Core Data
-                    var requestForUSDAItem = NSFetchRequest(entityName: "USDAItem")
-                    let itemDictionaryId = itemDictionary["_id"]! as String
+                    var requestForUSDAItem = NSFetchRequest(entityName: kCDUSDAItem)
+                    let itemDictionaryId = itemDictionary[kAPIID]! as String
                     let predicate = NSPredicate(format: "idValue == %@", itemDictionaryId)
                     requestForUSDAItem.predicate = predicate
                     var error: NSError?
                     var items = moc?.executeFetchRequest(requestForUSDAItem, error: &error)
                     //Also a countForFetchRequest, but we'll need the whole query later
-                    if items?.count != 0 {return}
+                    if items?.count != 0 {
+                        println("Item Already Saved")
+                        return
+                    }
                     
-                    //Saving the new item to Core Data
+                    //Writing the new item to Core Data
                     println("Saving to Core Data")
-                    
+                    let entityDescription = NSEntityDescription.entityForName(kCDUSDAItem, inManagedObjectContext: moc!)
+                    let usdaItem = USDAItem(entity: entityDescription!, insertIntoManagedObjectContext: moc!)
+                    usdaItem.idValue = itemDictionary[kAPIID] as String //Already tested above to make sure it exists
+                    usdaItem.dateAdded = NSDate()
+                    if let fieldsDictionary = itemDictionary[kAPIFields] as? NSDictionary {
+                        if fieldsDictionary[kAPIItemNameField] != nil {
+                            usdaItem.name = fieldsDictionary[kAPIItemNameField] as String
+                        }
+                        if let usdaFieldsDictionary = fieldsDictionary[kAPIUSDAFields] as? NSDictionary {
+                            if let calciumDictionary = usdaFieldsDictionary[kAPICalciumField] as? NSDictionary {
+                                let calciumValue: AnyObject = calciumDictionary[kAPIComponentValue]!
+                                usdaItem.calcium = "\(calciumValue)"
+                            } else {usdaItem.calcium = "0"}
+                            
+                            if let carbDictionary = usdaFieldsDictionary[kAPICarbohydratesField] as? NSDictionary {
+                                let carbValue: AnyObject = carbDictionary[kAPIComponentValue]!
+                                usdaItem.carbohydrate = "\(carbValue)"
+                            } else {usdaItem.carbohydrate = "0"}
+                            
+                            if let fatDictionary = usdaFieldsDictionary[kAPIFatTotalField] as? NSDictionary {
+                                let fatValue: AnyObject = fatDictionary[kAPIComponentValue]!
+                                usdaItem.fatTotal = "\(fatValue)"
+                            } else {usdaItem.fatTotal = "0"}
+                            
+                            if let cholesterolDictionary = usdaFieldsDictionary[kAPICholesterolField] as? NSDictionary {
+                                let cholesterolValue: AnyObject = cholesterolDictionary[kAPIComponentValue]!
+                                usdaItem.cholesterol = "\(cholesterolValue)"
+                            } else {usdaItem.cholesterol = "0"}
+                            
+                            if let proteinDictionary = usdaFieldsDictionary[kAPIProteinField] as? NSDictionary {
+                                let proteinValue: AnyObject = proteinDictionary[kAPIComponentValue]!
+                                usdaItem.protein = "\(proteinValue)"
+                            } else {usdaItem.protein = "0"}
+                            
+                            if let sugarDictionary = usdaFieldsDictionary[kAPISugarField] as? NSDictionary {
+                                let sugarValue: AnyObject = sugarDictionary[kAPIComponentValue]!
+                                usdaItem.sugar = "\(sugarValue)"
+                            } else {usdaItem.sugar = "0"}
+                            
+                            if let vitCDictionary = usdaFieldsDictionary[kAPIVitaminCField] as? NSDictionary {
+                                let vitCValue: AnyObject = vitCDictionary[kAPIComponentValue]!
+                                usdaItem.vitaminC = "\(vitCValue)"
+                            } else {usdaItem.vitaminC = "0"}
+                            
+                            if let energyDictionary = usdaFieldsDictionary[kAPIEnergyField] as? NSDictionary {
+                                let energyValue: AnyObject = energyDictionary[kAPIComponentValue]!
+                                usdaItem.energy = "\(energyValue)"
+                            } else {usdaItem.energy = "0"}
+                            
+                            (UIApplication.sharedApplication().delegate as AppDelegate).saveContext()
+                        }
+                    }
                 }
             }
         }
-
     }
 }
 //
