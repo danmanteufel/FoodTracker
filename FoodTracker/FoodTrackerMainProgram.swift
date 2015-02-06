@@ -14,12 +14,20 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
     //MARK: Defines
     let kSearchBarHeight: CGFloat = 44.0
     let kSuggestedFoodCell = "Suggested Food Cell"
+    let kMainToDetailSegue = "Main To Detail Segue"
+    enum ScopeButtonTitle: Int {
+        case Recommended = 0
+        case SearchResults = 1
+        case Saved = 2
+    }
     
     //MARK: Properties
     @IBOutlet weak var tableView: UITableView!
     var searchController: UISearchController!
     var scopeButtonTitles = ["Recommended", "Search Results", "Saved"]
     var model = FTModel()
+    var favoritedUSDAItems: [USDAItem] = []
+    var filteredFavoritedUSDAItems: [USDAItem] = []
     
     //MARK: Flow Functions
     override func viewDidLoad() {
@@ -49,6 +57,15 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
         removeObserver(self, forKeyPath: "apiResultsChanged")
     }
     
+    override func prepareForSegue(segue: UIStoryboardSegue, sender: AnyObject?) {
+        if segue.identifier == kMainToDetailSegue {
+            if sender != nil {
+                let detailVC = segue.destinationViewController as DetailVC
+                detailVC.usdaItem = sender as? USDAItem
+            }
+        }
+    }
+    
     //MARK: Helper Functions
     func filterContentForSearch(searchText: String, scope: Int) {
 //        filteredSuggestedSearchFoods = suggestedSearchFoods.filter({(food: String) -> Bool
@@ -61,8 +78,14 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
 //        filteredSuggestedSearchFoods = suggestedSearchFoods.filter(){food in food.rangeOfString(searchText) != nil}
         
         //Maybe even more concise?!? - YES! FTW.
-        
-        model.filteredSuggestedSearchFoods = model.suggestedSearchFoods.filter(){$0.rangeOfString(searchText) != nil}
+        switch ScopeButtonTitle(rawValue: scope)! {
+            case .Recommended:
+                model.filteredSuggestedSearchFoods = model.suggestedSearchFoods.filter(){$0.rangeOfString(searchText) != nil}
+            case .Saved:
+                filteredFavoritedUSDAItems = favoritedUSDAItems.filter(){$0.name.rangeOfString(searchText) != nil}
+            default:
+                break
+        }
     }
     
     override func observeValueForKeyPath(keyPath: String, ofObject object: AnyObject, change: [NSObject : AnyObject], context: UnsafeMutablePointer<Void>) {
@@ -72,21 +95,31 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
             //tableView.reloadData()//Somehow this isn't on the main queue
         }
     }
+    
+    func requestFavoritedUSDAItems() {
+        let fetchRequest = NSFetchRequest(entityName: model.kCDUSDAItem)
+        let moc = (UIApplication.sharedApplication().delegate as AppDelegate).managedObjectContext
+        favoritedUSDAItems = moc?.executeFetchRequest(fetchRequest, error: nil) as [USDAItem]
+    }
 
     //MARK: UITableView Data Source
     func tableView(tableView: UITableView, cellForRowAtIndexPath indexPath: NSIndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCellWithIdentifier(kSuggestedFoodCell) as UITableViewCell
-        switch searchController.searchBar.selectedScopeButtonIndex {
-        case 0:
+        switch ScopeButtonTitle(rawValue: searchController.searchBar.selectedScopeButtonIndex)! {
+        case .Recommended:
             if searchController.active {
                 cell.textLabel?.text = model.filteredSuggestedSearchFoods[indexPath.row]
             } else {
                 cell.textLabel?.text = model.suggestedSearchFoods[indexPath.row]
             }
-        case 1:
+        case .SearchResults:
             cell.textLabel?.text = model.apiSearchForFoods[indexPath.row].name
         default:
-            cell.textLabel?.text = "Haven't Implemented This Yet"
+            if searchController.active {
+                cell.textLabel?.text = filteredFavoritedUSDAItems[indexPath.row].name
+            } else {
+                cell.textLabel?.text = favoritedUSDAItems[indexPath.row].name
+            }
         }
 
         cell.accessoryType = .DisclosureIndicator
@@ -94,36 +127,46 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
     }
     
     func tableView(tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        switch searchController.searchBar.selectedScopeButtonIndex {
-        case 0:
-            if searchController.active {
-                return model.filteredSuggestedSearchFoods.count
-            } else {
-                return model.suggestedSearchFoods.count
-            }
-        case 1:
+        switch ScopeButtonTitle(rawValue: searchController.searchBar.selectedScopeButtonIndex)! {
+        case .Recommended:
+            if searchController.active {return model.filteredSuggestedSearchFoods.count}
+            return model.suggestedSearchFoods.count
+        case .SearchResults:
             return model.apiSearchForFoods.count
         default:
-            return 0
+            if searchController.active {return filteredFavoritedUSDAItems.count}
+            return favoritedUSDAItems.count
         }
     }
     
     //MARK: UITableViewDelegate
     func tableView(tableView: UITableView, didSelectRowAtIndexPath indexPath: NSIndexPath) {
-        switch searchController.searchBar.selectedScopeButtonIndex {
-        case 0:
+        switch ScopeButtonTitle(rawValue: searchController.searchBar.selectedScopeButtonIndex)! {
+        case .Recommended:
             var searchFoodName: String
             if searchController.active {
                 searchFoodName = model.filteredSuggestedSearchFoods[indexPath.row]
             } else {
                 searchFoodName = model.suggestedSearchFoods[indexPath.row]
             }
-            searchController.searchBar.selectedScopeButtonIndex = 1
+            searchController.searchBar.selectedScopeButtonIndex = ScopeButtonTitle.SearchResults.rawValue
             searchController.active = true
             model.makeRequest(searchFoodName)
-        case 1:
+        case .SearchResults:
+            self.performSegueWithIdentifier(kMainToDetailSegue, sender: nil)
             let idValue = model.apiSearchForFoods[indexPath.row].idValue
             model.saveUSDAItemForId(idValue)
+            searchController.searchBar.selectedScopeButtonIndex = ScopeButtonTitle.Saved.rawValue
+            requestFavoritedUSDAItems()
+            tableView.reloadData()
+        case .Saved:
+            var usdaItem: USDAItem?
+            if searchController.active {
+                usdaItem = filteredFavoritedUSDAItems[indexPath.row]
+            } else {
+                usdaItem = favoritedUSDAItems[indexPath.row]
+            }
+            performSegueWithIdentifier(kMainToDetailSegue, sender: usdaItem)
         default:
             break
         }
@@ -139,16 +182,17 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
     
     //MARK: UISearchBar Delegate
     func searchBarSearchButtonClicked(searchBar: UISearchBar) {
-        searchController.searchBar.selectedScopeButtonIndex = 1
+        searchController.searchBar.selectedScopeButtonIndex = ScopeButtonTitle.SearchResults.rawValue
         model.makeRequest(searchBar.text)
     }
     
     func searchBar(searchBar: UISearchBar, selectedScopeButtonIndexDidChange selectedScope: Int) {
+        if ScopeButtonTitle(rawValue: selectedScope)! == .Saved {requestFavoritedUSDAItems()}
         tableView.reloadData()
     }
     
     func searchBarCancelButtonClicked(searchBar: UISearchBar) {
-        searchController.searchBar.selectedScopeButtonIndex = 0
+//        searchController.searchBar.selectedScopeButtonIndex = ScopeButtonTitle.Recommended.rawValue
         tableView.reloadData()
     }
 }
@@ -159,6 +203,7 @@ class DetailVC: UIViewController {
     
     //MARK: Properties
     @IBOutlet weak var textView: UITextView!
+    var usdaItem: USDAItem?
     
     //MARK: Flow Functions
     @IBAction func eatItBBItemPressed(sender: AnyObject) {
