@@ -50,11 +50,13 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
     override func viewWillAppear(animated: Bool) {//Swift docs put this in the init and deinit functions
         super.viewWillAppear(animated)
         model.addObserver(self, forKeyPath: "apiResultsChanged", options: .allZeros, context: nil)
+        NSNotificationCenter.defaultCenter().addObserver(self, selector: "usdaItemDidComplete:", name: kUSDAItemNotification, object: nil)
     }
     
     override func viewWillDisappear(animated: Bool) {
         super.viewWillDisappear(animated)
-        removeObserver(self, forKeyPath: "apiResultsChanged")
+        model.removeObserver(self, forKeyPath: "apiResultsChanged")
+        NSNotificationCenter.defaultCenter().removeObserver(self)
     }
     
     override func prepareForSegue(segue: UIStoryboardSegue, sender: AnyObject?) {
@@ -93,6 +95,14 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
             println("Table Reloaded in Observer")
             dispatch_async(dispatch_get_main_queue()) {self.tableView.reloadData()}
             //tableView.reloadData()//Somehow this isn't on the main queue
+        }
+    }
+    
+    func usdaItemDidComplete(notification: NSNotification) {
+        println("usdaItemDidComplete in MainVC")
+        requestFavoritedUSDAItems()
+        if ScopeButtonTitle(rawValue: searchController.searchBar.selectedScopeButtonIndex)! == .Saved {
+            dispatch_async(dispatch_get_main_queue()) {self.tableView.reloadData()}
         }
     }
     
@@ -200,22 +210,126 @@ class MainVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISe
 //MARK: - Detail View Controller
 class DetailVC: UIViewController {
     //MARK: Defines
+    let kTitleLineSpacing = 10.0 as CGFloat
+    let kTitleFontSize = 22.0 as CGFloat
+    let kBodyLineSpacing = 20.0 as CGFloat
+    let kBodyFontSize = 14.0 as CGFloat
     
     //MARK: Properties
     @IBOutlet weak var textView: UITextView!
     var usdaItem: USDAItem?
     
     //MARK: Flow Functions
+    required init(coder aDecoder: NSCoder) {
+        super.init(coder: aDecoder)
+        NSNotificationCenter.defaultCenter().addObserver(self, selector: "usdaItemDidComplete:", name: kUSDAItemNotification, object: nil)
+    }
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        if usdaItem != nil {
+            textView.attributedText = createAttributedString(usdaItem!)
+        }
+    }
+    
     @IBAction func eatItBBItemPressed(sender: AnyObject) {
         
     }
     
-    //MARK: Helper Functions
+    deinit {
+        NSNotificationCenter.defaultCenter().removeObserver(self)
+    }
     
+    //MARK: Helper Functions
+    func usdaItemDidComplete(notification: NSNotification) {
+        println("usdaItemDidComplete in DetailVC")
+        usdaItem = notification.object as? USDAItem
+        if isViewLoaded() && view.window != nil {
+            textView.attributedText = createAttributedString(usdaItem!)
+        }
+    }
+    
+    func createAttributedString(usdaItem: USDAItem) -> NSAttributedString {
+        var itemAttString = NSMutableAttributedString()
+        
+        var centeredParaStyle = NSMutableParagraphStyle()
+        centeredParaStyle.alignment = .Center
+        centeredParaStyle.lineSpacing = kTitleLineSpacing
+        
+        var leftAlignedParaStyle = NSMutableParagraphStyle()
+        leftAlignedParaStyle.alignment = .Left
+        leftAlignedParaStyle.lineSpacing = kBodyLineSpacing
+        
+        var titleAttsDictionary = [
+            NSForegroundColorAttributeName : UIColor.blackColor(),
+            NSFontAttributeName : UIFont.boldSystemFontOfSize(kTitleFontSize),
+            NSParagraphStyleAttributeName : centeredParaStyle
+        ]
+        
+        var firstWordAttsDictionary = [
+            NSForegroundColorAttributeName : UIColor.blackColor(),
+            NSFontAttributeName : UIFont.boldSystemFontOfSize(kBodyFontSize),
+            NSParagraphStyleAttributeName : leftAlignedParaStyle
+        ]
+        
+        var bodyAttsDictionary = [
+            NSForegroundColorAttributeName : UIColor.darkGrayColor(),
+            NSFontAttributeName : UIFont.systemFontOfSize(kBodyFontSize),
+            NSParagraphStyleAttributeName : leftAlignedParaStyle
+        ]
+        
+        var altBodyAttsDictionary = [
+            NSForegroundColorAttributeName : UIColor.lightGrayColor(),
+            NSFontAttributeName : UIFont.systemFontOfSize(kBodyFontSize),
+            NSParagraphStyleAttributeName : leftAlignedParaStyle
+        ]
+        
+        let titleString = NSAttributedString(string: "\(usdaItem.name)\n\n", attributes: titleAttsDictionary)
+        itemAttString.appendAttributedString(titleString)
+        let calciumTitleString = NSAttributedString(string: "Calcium: ", attributes: firstWordAttsDictionary)
+        let calciumBodyString = NSAttributedString(string: "\(usdaItem.calcium)% \n", attributes: bodyAttsDictionary)
+        itemAttString.appendAttributedString(calciumTitleString)
+        itemAttString.appendAttributedString(calciumBodyString)
+        let carbsTitleString = NSAttributedString(string: "Carbohydrates: ", attributes: firstWordAttsDictionary)
+        let carbsBodyString = NSAttributedString(string: "\(usdaItem.carbohydrate)% \n", attributes: altBodyAttsDictionary)
+        itemAttString.appendAttributedString(carbsTitleString)
+        itemAttString.appendAttributedString(carbsBodyString)
+        let cholesterolTitleString = NSAttributedString(string: "Cholesterol: ", attributes: firstWordAttsDictionary)
+        let cholesterolBodyString = NSAttributedString(string: "\(usdaItem.cholesterol)% \n", attributes: bodyAttsDictionary)
+        itemAttString.appendAttributedString(cholesterolTitleString)
+        itemAttString.appendAttributedString(cholesterolBodyString)
+        let energyTitleString = NSAttributedString(string: "Energy: ", attributes: firstWordAttsDictionary)
+        let energyBodyString = NSAttributedString(string: "\(usdaItem.energy)% \n", attributes: altBodyAttsDictionary)
+        itemAttString.appendAttributedString(energyTitleString)
+        itemAttString.appendAttributedString(energyBodyString)
+        let fatTitleString = NSAttributedString(string: "Fat: ", attributes: firstWordAttsDictionary)
+        let fatBodyString = NSAttributedString(string: "\(usdaItem.fatTotal)% \n", attributes: bodyAttsDictionary)
+        itemAttString.appendAttributedString(fatTitleString)
+        itemAttString.appendAttributedString(fatBodyString)
+        let proteinTitleString = NSAttributedString(string: "Protein: ", attributes: firstWordAttsDictionary)
+        let proteinBodyString = NSAttributedString(string: "\(usdaItem.protein)% \n", attributes: altBodyAttsDictionary)
+        itemAttString.appendAttributedString(proteinTitleString)
+        itemAttString.appendAttributedString(proteinBodyString)
+        let sugarTitleString = NSAttributedString(string: "Sugar: ", attributes: firstWordAttsDictionary)
+        let sugarBodyString = NSAttributedString(string: "\(usdaItem.sugar)% \n", attributes: bodyAttsDictionary)
+        itemAttString.appendAttributedString(sugarTitleString)
+        itemAttString.appendAttributedString(sugarBodyString)
+        let vitCTitleString = NSAttributedString(string: "Vitamin C: ", attributes: firstWordAttsDictionary)
+        let vitCBodyString = NSAttributedString(string: "\(usdaItem.vitaminC)% \n", attributes: altBodyAttsDictionary)
+        itemAttString.appendAttributedString(vitCTitleString)
+        itemAttString.appendAttributedString(vitCBodyString)
+        //Not sure % is correct.  I think the values are in their respective units
+        
+        return itemAttString
+    }
     
 }
 
 //MARK: - Model
+//MARK: Defines
+let kUSDAItemNotification = "USDA item instance saved to Core Data."
+
+//MARK: Model Class
 class FTModel: NSObject {
     //MARK: Defines
     let kDefaultSuggestedSearchFoods = ["apple", "bagel", "banana", "beer", "bread", "carrots", "cheddar cheese", "chicken breast", "chili with beans", "chocolate chip cookie", "coffee", "cola", "corn", "egg", "graham cracker", "granola bar", "green beans", "ground beef patty", "hot dog", "ice cream", "jelly doughnut", "ketchup", "milk", "mixed nuts", "mustard", "oatmeal", "orange juice", "peanut butter", "pizza", "pork chop", "potato", "potato chips", "pretzels", "raisins", "ranch salad dressing", "red wine", "rice", "salsa", "shrimp", "spaghetti", "spaghetti sauce", "tuna", "white wine", "yellow cake"]
@@ -398,6 +512,7 @@ class FTModel: NSObject {
                             } else {usdaItem.energy = "0"}
                             
                             (UIApplication.sharedApplication().delegate as AppDelegate).saveContext()
+                            NSNotificationCenter.defaultCenter().postNotificationName(kUSDAItemNotification, object: usdaItem)
                         }
                     }
                 }
